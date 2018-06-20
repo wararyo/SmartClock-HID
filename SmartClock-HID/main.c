@@ -137,7 +137,7 @@ usbRequest_t    *rq = (void *)data;
 
 /* ------------------------------------------------------------------------- */
 
-ISR(INT1_vect)//ロリコンA変化
+/*ISR(INT1_vect)//ロリコンA変化
 {
 	//delta++;
 	interruptCount++;
@@ -159,6 +159,17 @@ ISR(INT1_vect)//ロリコンA変化
 		}
 	}
 	//cbi(PORTD,PD6);
+}*/
+
+ISR(TIMER0_COMPA_vect) {
+	static const int dir[] = { 0,1,-1,0,-1,0,0,1,1,0,0,-1,0,-1,1,0 }; /* 回転方向テーブル */
+	static int i;//インデックス
+	int n;
+
+	i = (i << 2) | (bit_is_clear(PIND,PD3)<<1) | bit_is_clear(PIND,PD5);   /* 前回値と今回値でインデックスとする */
+	n = dir[i & 0x0F];
+	if(n) tbi(PORTD,PD6);
+	delta += n;
 }
 
 int __attribute__((noreturn)) main(void)
@@ -177,9 +188,15 @@ int __attribute__((noreturn)) main(void)
 	cbi(PORTD,PD3);//PD3内部プルアップ **無効**
 	sbi(PORTD,PD5);//PD5内部プルアップ
 	
-	sbi(MCUCR, ISC11);
-	cbi(MCUCR, ISC11);//INT1立ち上がり
-	sbi(GIMSK,INT1);//INT1割り込み許可
+	/**
+	 * timer interrupt
+	 * CTC 16MHz / 1024 / 127 = 120Hzくらい
+	 */
+	TCCR0A = 0b00000010;
+	TCCR0B = 0b00000011;
+	OCR0A  = 0xFF;
+	//TIMSK0 = 0b00000010;
+	sbi(TIMSK,OCIE0A);
 	
 	//USB init
 	uchar   i;
@@ -208,19 +225,13 @@ int __attribute__((noreturn)) main(void)
 	//unsigned char j = 0;
     for(;;){                /* main event loop */
 		//USB loop start
-		cbi(GIMSK,INT1);//INT1割り込みやめて
         DBG1(0x02, 0, 0);   /* debug output: main loop iterates */
         wdt_reset();
         usbPoll();
-		sbi(GIMSK,INT1);//INT1割り込み許可
 		
         if(usbInterruptIsReady()){
-			cbi(GIMSK,INT1);//INT1割り込みやめて
             /* called after every poll of the interrupt endpoint */
             //advanceCircleByFixedAngle();
-			
-			//if(bit_is_set(PIND,3)) sbi(PORTD,PD6);
-			//else cbi(PORTD,PD6);
 			
             DBG1(0x03, 0, 0);   /* debug output: interrupt report prepared */
 			//j++;
@@ -233,8 +244,6 @@ int __attribute__((noreturn)) main(void)
 			//resetReportBuffer(&reportBuffer);
 			delta=0;
 			interruptCount = 0;
-			//tbi(PORTD,PD6);
-			sbi(GIMSK,INT1);//INT1割り込み許可
         }
 		//USB loop end
     }
