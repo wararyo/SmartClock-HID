@@ -168,7 +168,6 @@ ISR(TIMER0_COMPA_vect) {
 
 	i = (i << 2) | (bit_is_clear(PIND,PD3)<<1) | bit_is_clear(PIND,PD5);   /* 前回値と今回値でインデックスとする */
 	n = dir[i & 0x0F];
-	if(n) tbi(PORTD,PD6);
 	delta += n;
 }
 
@@ -194,7 +193,7 @@ int __attribute__((noreturn)) main(void)
 	 */
 	TCCR0A = 0b00000010;
 	TCCR0B = 0b00000011;
-	OCR0A  = 0xFF;
+	OCR0A  = 144;
 	//TIMSK0 = 0b00000010;
 	sbi(TIMSK,OCIE0A);
 	
@@ -235,14 +234,19 @@ int __attribute__((noreturn)) main(void)
 			
             DBG1(0x03, 0, 0);   /* debug output: interrupt report prepared */
 			//j++;
-			reportBuffer.dWheel = delta;
+			reportBuffer.dWheel = delta/4;
 			if(bit_is_set(PINB,PB0)) cbi(reportBuffer.buttonMask,0);//戻るボタンは左クリック
 			else sbi(reportBuffer.buttonMask, 0);
 			if(bit_is_set(PINB,PB1)) cbi(reportBuffer.buttonMask,1);//決定ボタンは右クリック
 			else sbi(reportBuffer.buttonMask, 1);
             usbSetInterrupt((void *)&reportBuffer, sizeof(reportBuffer));
 			//resetReportBuffer(&reportBuffer);
-			delta=0;
+			if(delta/4 != 0) {
+				if(delta > 0) delta %= 4;
+				else {
+					delta = -(-delta % 4);
+				}
+			}
 			interruptCount = 0;
         }
 		//USB loop end
