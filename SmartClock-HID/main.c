@@ -24,88 +24,78 @@ publish any hardware using these IDs! This is for demonstration only!
 
 #include <avr/pgmspace.h>   /* required by usbdrv.h */
 #include "usbdrv.h"
-#include "oddebug.h"        /* This is also an example for using debug macros */
+//#include "oddebug.h"        /* This is also an example for using debug macros */
 
 #define cbi(addr,bit)     addr &= ~(1<<bit)
 #define sbi(addr,bit)     addr |=  (1<<bit)
-#define tbi(addr,bit)	  addr ^=  (1<<bit)
+//#define tbi(addr,bit)	  addr ^=  (1<<bit)
 
 /* ------------------------------------------------------------------------- */
 /* ----------------------------- USB interface ----------------------------- */
 /* ------------------------------------------------------------------------- */
 
-PROGMEM const char usbHidReportDescriptor[52] = { /* USB report descriptor, size must match usbconfig.h */
-    0x05, 0x01,                    // USAGE_PAGE (Generic Desktop)
-    0x09, 0x02,                    // USAGE (Mouse)
-    0xa1, 0x01,                    // COLLECTION (Application)
-    0x09, 0x01,                    //   USAGE (Pointer)
-    0xA1, 0x00,                    //   COLLECTION (Physical)
-    0x05, 0x09,                    //     USAGE_PAGE (Button)
-    0x19, 0x01,                    //     USAGE_MINIMUM
-    0x29, 0x03,                    //     USAGE_MAXIMUM
-    0x15, 0x00,                    //     LOGICAL_MINIMUM (0)
-    0x25, 0x01,                    //     LOGICAL_MAXIMUM (1)
-    0x95, 0x03,                    //     REPORT_COUNT (3)
-    0x75, 0x01,                    //     REPORT_SIZE (1)
-    0x81, 0x02,                    //     INPUT (Data,Var,Abs)
-    0x95, 0x01,                    //     REPORT_COUNT (1)
-    0x75, 0x05,                    //     REPORT_SIZE (5)
-    0x81, 0x03,                    //     INPUT (Const,Var,Abs)
-    0x05, 0x01,                    //     USAGE_PAGE (Generic Desktop)
-    0x09, 0x30,                    //     USAGE (X)
-    0x09, 0x31,                    //     USAGE (Y)
-    0x09, 0x38,                    //     USAGE (Wheel)
-    0x15, 0x81,                    //     LOGICAL_MINIMUM (-127)
-    0x25, 0x7F,                    //     LOGICAL_MAXIMUM (127)
-    0x75, 0x08,                    //     REPORT_SIZE (8)
-    0x95, 0x03,                    //     REPORT_COUNT (3)
-    0x81, 0x06,                    //     INPUT (Data,Var,Rel)
-    0xC0,                          //   END_COLLECTION
-    0xC0,                          // END COLLECTION
+PROGMEM const char usbHidReportDescriptor[63] = {
+	0x05, 0x01,			// USAGE_PAGE (Generic Desktop)
+	0x09, 0x06,			// USAGE (Keyboard)
+	0xa1, 0x01,			// COLLECTION (Application)
+	0x05, 0x07,			//   USAGE_PAGE (Keyboard)
+	0x19, 0xe0,			//   USAGE_MINIMUM (Keyboard LeftControl)
+	0x29, 0xe7,			//   USAGE_MAXIMUM (Keyboard Right GUI)
+	0x15, 0x00,			//   LOGICAL_MINIMUM (0)
+	0x25, 0x01,			//   LOGICAL_MAXIMUM (1)
+	0x75, 0x01,			//   REPORT_SIZE (1)
+	0x95, 0x08,			//   REPORT_COUNT (8)
+	0x81, 0x02,			//   INPUT (Data,Var,Abs)
+	0x95, 0x01,			//   REPORT_COUNT (1)
+	0x75, 0x08,			//   REPORT_SIZE (8)
+	0x81, 0x03,			//   INPUT (Cnst,Var,Abs)
+	0x95, 0x05,			//   REPORT_COUNT (5)
+	0x75, 0x01,			//   REPORT_SIZE (1)
+	0x05, 0x08,			//   USAGE_PAGE (LEDs)
+	0x19, 0x01,			//   USAGE_MINIMUM (Num Lock)
+	0x29, 0x05,			//   USAGE_MAXIMUM (Kana)
+	0x91, 0x02,			//   OUTPUT (Data,Var,Abs)
+	0x95, 0x01,			//   REPORT_COUNT (1)
+	0x75, 0x03,			//   REPORT_SIZE (3)
+	0x91, 0x03,			//   OUTPUT (Cnst,Var,Abs)
+	0x95, 0x06,			//   REPORT_COUNT (6)
+	0x75, 0x08,			//   REPORT_SIZE (8)
+	0x15, 0x00,			//   LOGICAL_MINIMUM (0)
+	0x25, 0x65,			//   LOGICAL_MAXIMUM (101)
+	0x05, 0x07,			//   USAGE_PAGE (Keyboard)
+	0x19, 0x00,			//   USAGE_MINIMUM (Reserved (no event indicated))
+	0x29, 0x65,			//   USAGE_MAXIMUM (Keyboard Application)
+	0x81, 0x00,			//   INPUT (Data,Ary,Abs)
+	0xc0				// End Collection
 };
-/* This is the same report descriptor as seen in a Logitech mouse. The data
- * described by this descriptor consists of 4 bytes:
- *      .  .  .  .  . B2 B1 B0 .... one byte with mouse button states
- *     X7 X6 X5 X4 X3 X2 X1 X0 .... 8 bit signed relative coordinate x
- *     Y7 Y6 Y5 Y4 Y3 Y2 Y1 Y0 .... 8 bit signed relative coordinate y
- *     W7 W6 W5 W4 W3 W2 W1 W0 .... 8 bit signed relative coordinate wheel
- */
 typedef struct{
-    uchar   buttonMask;
-    char    dx;
-    char    dy;
-    char    dWheel;
+    //uchar   reportID;
+	uchar	modifier;
+	uchar	reserved;
+	uchar	keyCodes[6];
 }report_t;
 
 static report_t reportBuffer;
-static int      sinus = 7 << 6, cosinus = 0;
 static uchar    idleRate;   /* repeat rate for keyboards, never used for mice */
 
 static signed char delta = 0;
-static unsigned char interruptCount = 0;
-
-
-/* The following function advances sin/cos by a fixed angle
- * and stores the difference to the previous coordinates in the report
- * descriptor.
- * The algorithm is the simulation of a second order differential equation.
- */
-static void advanceCircleByFixedAngle(void)
-{
-char    d;
-
-#define DIVIDE_BY_64(val)  (val + (val > 0 ? 32 : -32)) >> 6    /* rounding divide */
-    reportBuffer.dx = d = DIVIDE_BY_64(cosinus);
-    sinus += d;
-    reportBuffer.dy = d = DIVIDE_BY_64(sinus);
-    cosinus -= d;
-}
 
 static void resetReportBuffer(report_t* r){
-	r->buttonMask = 0;
-	r->dx = 0;
-	r->dy = 0;
-	r->dWheel = 0;
+	//r->reportID = 0x02;
+	r->modifier = 0b00000000;
+	r->reserved = 0;
+	for(int i=0;i<6;i++){
+		r->keyCodes[i] = 0;
+	}
+}
+
+static void addKeyCode(report_t* r, uchar keyCode){
+	for(int i=0;i<6;i++){
+		if( r->keyCodes[i] == 0) {
+			r->keyCodes[i] = keyCode;
+			return;
+		}
+	}
 }
 
 /* ------------------------------------------------------------------------- */
@@ -118,7 +108,7 @@ usbRequest_t    *rq = (void *)data;
      * the specification, we implement them in this example.
      */
     if((rq->bmRequestType & USBRQ_TYPE_MASK) == USBRQ_TYPE_CLASS){    /* class request type */
-        DBG1(0x50, &rq->bRequest, 1);   /* debug output: print our request */
+        //DBG1(0x50, &rq->bRequest, 1);   /* debug output: print our request */
         if(rq->bRequest == USBRQ_HID_GET_REPORT){  /* wValue: ReportType (highbyte), ReportID (lowbyte) */
             /* we only have one report type, so don't look at wValue */
             usbMsgPtr = (void *)&reportBuffer;
@@ -137,30 +127,6 @@ usbRequest_t    *rq = (void *)data;
 
 /* ------------------------------------------------------------------------- */
 
-/*ISR(INT1_vect)//ロリコンA変化
-{
-	//delta++;
-	interruptCount++;
-	if(interruptCount > 0) tbi(PORTD,PD6);//cbi(GIMSK,INT1);//INT1割り込みやめて
-	if(delta == 0) {
-		for(int i = 0; i < 16; i++) {
-			_delay_us(100);   //チャタリング防止
-			wdt_reset();
-			usbPoll();
-		}
-		cbi(EIFR,INTF1); //チャタリング防止の後で、割り込みフラグをクリア
-		if (bit_is_set(PIND,3)) { // エンコーダ出力AがやっぱりHighのとき
-			
-			if (bit_is_clear(PIND,5)) { // エンコーダ出力BがLowのとき
-					delta++; //時計回り
-				} else {  // エンコーダ出力BがHighのとき
-					delta--; //反時計回り
-			}
-		}
-	}
-	//cbi(PORTD,PD6);
-}*/
-
 ISR(TIMER0_COMPA_vect) {
 	static const int dir[] = { 0,1,-1,0,-1,0,0,1,1,0,0,-1,0,-1,1,0 }; /* 回転方向テーブル */
 	static int i;//インデックス
@@ -173,8 +139,8 @@ ISR(TIMER0_COMPA_vect) {
 
 int __attribute__((noreturn)) main(void)
 {
-	sbi(DDRD, PD6);
-	cbi(PORTD, PD6);
+	//sbi(DDRD, PD6);
+	//cbi(PORTD, PD6);
 	
 	cbi(DDRB,PB0);
 	cbi(DDRB,PB1);//PB0,1入力
@@ -208,8 +174,8 @@ int __attribute__((noreturn)) main(void)
      * That's the way we need D+ and D-. Therefore we don't need any
      * additional hardware initialization.
      */
-    odDebugInit();
-    DBG1(0x00, 0, 0);       /* debug output: main starts */
+    //odDebugInit();
+    //DBG1(0x00, 0, 0);       /* debug output: main starts */
     usbInit();
     usbDeviceDisconnect();  /* enforce re-enumeration, do this while interrupts are disabled! */
     i = 0;
@@ -219,12 +185,12 @@ int __attribute__((noreturn)) main(void)
     }
     usbDeviceConnect();
     sei();
-    DBG1(0x01, 0, 0);       /* debug output: main loop starts */
+    //DBG1(0x01, 0, 0);       /* debug output: main loop starts */
 	//USB init end
 	//unsigned char j = 0;
     for(;;){                /* main event loop */
 		//USB loop start
-        DBG1(0x02, 0, 0);   /* debug output: main loop iterates */
+        //DBG1(0x02, 0, 0);   /* debug output: main loop iterates */
         wdt_reset();
         usbPoll();
 		
@@ -232,22 +198,21 @@ int __attribute__((noreturn)) main(void)
             /* called after every poll of the interrupt endpoint */
             //advanceCircleByFixedAngle();
 			
-            DBG1(0x03, 0, 0);   /* debug output: interrupt report prepared */
+            //DBG1(0x03, 0, 0);   /* debug output: interrupt report prepared */
 			//j++;
-			reportBuffer.dWheel = delta/4;
-			if(bit_is_set(PINB,PB0)) cbi(reportBuffer.buttonMask,0);//戻るボタンは左クリック
-			else sbi(reportBuffer.buttonMask, 0);
-			if(bit_is_set(PINB,PB1)) cbi(reportBuffer.buttonMask,1);//決定ボタンは右クリック
-			else sbi(reportBuffer.buttonMask, 1);
+			resetReportBuffer(&reportBuffer);
+			if(delta > 3) addKeyCode(&reportBuffer, 26);
+			else if(delta < -3) addKeyCode(&reportBuffer, 22);
+			if(bit_is_clear(PINB,PB0)) addKeyCode(&reportBuffer,4); //戻るボタンは'a'
+			if(bit_is_clear(PINB,PB1)) addKeyCode(&reportBuffer, 7); //決定ボタンは'd'
             usbSetInterrupt((void *)&reportBuffer, sizeof(reportBuffer));
-			//resetReportBuffer(&reportBuffer);
-			if(delta/4 != 0) {
+			delta = 0;
+			/*if(delta/4 != 0) {
 				if(delta > 0) delta %= 4;
 				else {
 					delta = -(-delta % 4);
 				}
-			}
-			interruptCount = 0;
+			}*/
         }
 		//USB loop end
     }
