@@ -34,7 +34,7 @@ publish any hardware using these IDs! This is for demonstration only!
 /* ----------------------------- USB interface ----------------------------- */
 /* ------------------------------------------------------------------------- */
 
-PROGMEM const char usbHidReportDescriptor[63] = {
+PROGMEM const char usbHidReportDescriptor[45] = {
 	0x05, 0x01,			// USAGE_PAGE (Generic Desktop)
 	0x09, 0x06,			// USAGE (Keyboard)
 	0xa1, 0x01,			// COLLECTION (Application)
@@ -49,15 +49,7 @@ PROGMEM const char usbHidReportDescriptor[63] = {
 	0x95, 0x01,			//   REPORT_COUNT (1)
 	0x75, 0x08,			//   REPORT_SIZE (8)
 	0x81, 0x03,			//   INPUT (Cnst,Var,Abs)
-	0x95, 0x05,			//   REPORT_COUNT (5)
-	0x75, 0x01,			//   REPORT_SIZE (1)
-	0x05, 0x08,			//   USAGE_PAGE (LEDs)
-	0x19, 0x01,			//   USAGE_MINIMUM (Num Lock)
-	0x29, 0x05,			//   USAGE_MAXIMUM (Kana)
-	0x91, 0x02,			//   OUTPUT (Data,Var,Abs)
-	0x95, 0x01,			//   REPORT_COUNT (1)
-	0x75, 0x03,			//   REPORT_SIZE (3)
-	0x91, 0x03,			//   OUTPUT (Cnst,Var,Abs)
+
 	0x95, 0x06,			//   REPORT_COUNT (6)
 	0x75, 0x08,			//   REPORT_SIZE (8)
 	0x15, 0x00,			//   LOGICAL_MINIMUM (0)
@@ -82,8 +74,8 @@ static signed char delta = 0;
 
 static void resetReportBuffer(report_t* r){
 	//r->reportID = 0x02;
-	r->modifier = 0b00000000;
-	r->reserved = 0;
+	//r->modifier = 0;
+	//r->reserved = 0;
 	for(int i=0;i<6;i++){
 		r->keyCodes[i] = 0;
 	}
@@ -201,18 +193,18 @@ int __attribute__((noreturn)) main(void)
             //DBG1(0x03, 0, 0);   /* debug output: interrupt report prepared */
 			//j++;
 			resetReportBuffer(&reportBuffer);
-			if(delta > 3) addKeyCode(&reportBuffer, 26);
-			else if(delta < -3) addKeyCode(&reportBuffer, 22);
-			if(bit_is_clear(PINB,PB0)) addKeyCode(&reportBuffer,4); //戻るボタンは'a'
-			if(bit_is_clear(PINB,PB1)) addKeyCode(&reportBuffer, 7); //決定ボタンは'd'
+			if(delta > 3) {
+				addKeyCode(&reportBuffer, 26);//W
+				delta %= 4;
+			}
+			else if(delta < -3) {
+				addKeyCode(&reportBuffer, 22);//S
+				delta = 0;//-(-delta % 4);
+			}
+			if(bit_is_clear(PINB,PB0)) addKeyCode(&reportBuffer,4); //戻るボタンはA
+			if(bit_is_clear(PINB,PB1)) addKeyCode(&reportBuffer,7); //決定ボタンはD
             usbSetInterrupt((void *)&reportBuffer, sizeof(reportBuffer));
-			delta = 0;
-			/*if(delta/4 != 0) {
-				if(delta > 0) delta %= 4;
-				else {
-					delta = -(-delta % 4);
-				}
-			}*/
+			//delta = 0;
         }
 		//USB loop end
     }
