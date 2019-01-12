@@ -124,7 +124,7 @@ ISR(TIMER0_COMPA_vect) {
 	static int i;//インデックス
 	int n;
 
-	i = (i << 2) | (bit_is_clear(PIND,PD3)<<1) | bit_is_clear(PIND,PD5);   /* 前回値と今回値でインデックスとする */
+	i = (i << 2) | (bit_is_clear(PIND,PD3)<<1) | bit_is_clear(PIND,PD4);   /* 前回値と今回値でインデックスとする */
 	n = dir[i & 0x0F];
 	delta += n;
 }
@@ -134,16 +134,17 @@ int __attribute__((noreturn)) main(void)
 	//sbi(DDRD, PD6);
 	//cbi(PORTD, PD6);
 	
-	cbi(DDRB,PB0);
-	cbi(DDRB,PB1);//PB0,1入力
-	sbi(PORTB,PB0);
-	sbi(PORTB,PB1);//PB0,1内部プルアップ有効
+	//Buttons
+	cbi(DDRB,PB1);
+	cbi(DDRB,PB2);//PB0,1入力
+	sbi(PORTB,PB1);
+	sbi(PORTB,PB2);//PB0,1内部プルアップ有効
 	
 	//Rotary init
 	cbi(DDRD,PD3);//PD3入力
-	cbi(DDRD,PD5);//PD5入力
+	cbi(DDRD,PD4);//PD5入力
 	cbi(PORTD,PD3);//PD3内部プルアップ **無効**
-	sbi(PORTD,PD5);//PD5内部プルアップ
+	sbi(PORTD,PD4);//PD5内部プルアップ
 	
 	/**
 	 * timer interrupt
@@ -153,7 +154,7 @@ int __attribute__((noreturn)) main(void)
 	TCCR0B = 0b00000011;
 	OCR0A  = 144;
 	//TIMSK0 = 0b00000010;
-	sbi(TIMSK,OCIE0A);
+	sbi(TIMSK0,OCIE0A);
 	
 	//USB init
 	uchar   i;
@@ -199,10 +200,10 @@ int __attribute__((noreturn)) main(void)
 			}
 			else if(delta < -3) {
 				addKeyCode(&reportBuffer, 22);//S
-				delta = 0;//-(-delta % 4);
+				delta = -(-delta % 4);
 			}
-			if(bit_is_clear(PINB,PB0)) addKeyCode(&reportBuffer,4); //戻るボタンはA
-			if(bit_is_clear(PINB,PB1)) addKeyCode(&reportBuffer,7); //決定ボタンはD
+			if(bit_is_clear(PINB,PB1)) addKeyCode(&reportBuffer,4); //戻るボタンはA
+			if(bit_is_clear(PINB,PB2)) addKeyCode(&reportBuffer,7); //決定ボタンはD
             usbSetInterrupt((void *)&reportBuffer, sizeof(reportBuffer));
 			//delta = 0;
         }
