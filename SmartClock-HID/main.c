@@ -71,6 +71,7 @@ static report_t reportBuffer;
 static uchar    idleRate;   /* repeat rate for keyboards, never used for mice */
 
 static signed char delta = 0;
+static unsigned char PIRCount = 0;
 
 static void resetReportBuffer(report_t* r){
 	//r->reportID = 0x02;
@@ -120,6 +121,8 @@ usbRequest_t    *rq = (void *)data;
 /* ------------------------------------------------------------------------- */
 
 ISR(TIMER0_COMPA_vect) {
+	
+	//ロータリーエンコーダー処理
 	static const int dir[] = { 0,1,-1,0,-1,0,0,1,1,0,0,-1,0,-1,1,0 }; /* 回転方向テーブル */
 	static int i;//インデックス
 	int n;
@@ -127,6 +130,12 @@ ISR(TIMER0_COMPA_vect) {
 	i = (i << 2) | (bit_is_clear(PIND,PD3)<<1) | bit_is_clear(PIND,PD4);   /* 前回値と今回値でインデックスとする */
 	n = dir[i & 0x0F];
 	delta += n;
+	
+	//人感センサー処理
+	if(bit_is_clear(PIND,PD7)) {
+		if(PIRCount < 0xFF) PIRCount++;
+	}
+	else PIRCount = 0;
 }
 
 int __attribute__((noreturn)) main(void)
@@ -145,6 +154,10 @@ int __attribute__((noreturn)) main(void)
 	cbi(DDRD,PD4);//PD5入力
 	cbi(PORTD,PD3);//PD3内部プルアップ **無効**
 	sbi(PORTD,PD4);//PD5内部プルアップ
+	
+	//PIR Sensor
+	cbi(DDRD, PD7);//PD7入力
+	cbi(PORTD, PD7);//PD7内部プルアップ無効
 	
 	/**
 	 * timer interrupt
@@ -204,6 +217,7 @@ int __attribute__((noreturn)) main(void)
 			}
 			if(bit_is_clear(PINB,PB1)) addKeyCode(&reportBuffer,4); //戻るボタンはA
 			if(bit_is_clear(PINB,PB2)) addKeyCode(&reportBuffer,7); //決定ボタンはD
+			if(PIRCount > 200 && PIRCount < 0xFF) addKeyCode(&reportBuffer,20); //人感センサーはQ
             usbSetInterrupt((void *)&reportBuffer, sizeof(reportBuffer));
 			//delta = 0;
         }
