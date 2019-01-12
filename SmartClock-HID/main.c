@@ -34,7 +34,7 @@ publish any hardware using these IDs! This is for demonstration only!
 /* ----------------------------- USB interface ----------------------------- */
 /* ------------------------------------------------------------------------- */
 
-PROGMEM const char usbHidReportDescriptor[45] = {
+PROGMEM const char usbHidReportDescriptor[USB_CFG_HID_REPORT_DESCRIPTOR_LENGTH] = {
 	0x05, 0x01,			// USAGE_PAGE (Generic Desktop)
 	0x09, 0x06,			// USAGE (Keyboard)
 	0xa1, 0x01,			// COLLECTION (Application)
