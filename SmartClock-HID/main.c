@@ -28,7 +28,7 @@ publish any hardware using these IDs! This is for demonstration only!
 
 #define cbi(addr,bit)     addr &= ~(1<<bit)
 #define sbi(addr,bit)     addr |=  (1<<bit)
-#define tbi(addr,bit)	  addr ^=  (1<<bit)
+//#define tbi(addr,bit)	  addr ^=  (1<<bit)
 
 /* ------------------------------------------------------------------------- */
 /* ----------------------------- USB interface ----------------------------- */
@@ -71,12 +71,11 @@ static report_t reportBuffer;
 static uchar    idleRate;   /* repeat rate for keyboards, never used for mice */
 
 static signed char delta = 0;
-static unsigned char interruptCount = 0;
 static unsigned char PIRCount = 0;
 
 static void resetReportBuffer(report_t* r){
 	//r->reportID = 0x02;
-	r->modifier = 0;
+	//r->modifier = 0;
 	//r->reserved = 0;
 	for(int i=0;i<6;i++){
 		r->keyCodes[i] = 0;
@@ -121,20 +120,22 @@ usbRequest_t    *rq = (void *)data;
 
 /* ------------------------------------------------------------------------- */
 
-ISR(INT1_vect)//ロリコンA変化
-{
-	//delta++;
-	//interruptCount++;
-	//if(interruptCount > 0) cbi(EIMSK,INT1);//INT1割り込みやめて
-	//cbi(EIFR,INTF1); //チャタリング防止の後で、割り込みフラグをクリア
-	//if (bit_is_set(PIND,3)) { // エンコーダ出力AがやっぱりHighのとき
-			
-		if (bit_is_clear(PIND,PD4)) { // エンコーダ出力BがLowのとき
-			delta--; //時計回り
-		} else {  // エンコーダ出力BがHighのとき
-			delta++; //反時計回り
-		}
-	//}
+ISR(TIMER0_COMPA_vect) {
+	
+	//ロータリーエンコーダー処理
+	static const int dir[] = { 0,1,-1,0,-1,0,0,1,1,0,0,-1,0,-1,1,0 }; /* 回転方向テーブル */
+	static int i;//インデックス
+	int n;
+
+	i = (i << 2) | (bit_is_clear(PIND,PD3)<<1) | bit_is_clear(PIND,PD4);   /* 前回値と今回値でインデックスとする */
+	n = dir[i & 0x0F];
+	delta += n;
+	
+	//人感センサー処理
+	if(bit_is_clear(PIND,PD7)) {
+		if(PIRCount < 0xFF) PIRCount++;
+	}
+	else PIRCount = 0;
 }
 
 int __attribute__((noreturn)) main(void)
@@ -149,14 +150,10 @@ int __attribute__((noreturn)) main(void)
 	sbi(PORTB,PB2);//PB0,1内部プルアップ有効
 	
 	//Rotary init
-	cbi(DDRD,PD3);//PD3入力 A
-	cbi(DDRD,PD4);//PD4入力 B
+	cbi(DDRD,PD3);//PD3入力
+	cbi(DDRD,PD4);//PD5入力
 	cbi(PORTD,PD3);//PD3内部プルアップ **無効**
-	sbi(PORTD,PD4);//PD4内部プルアップ
-	
-	sbi(EICRA, ISC11);
-	sbi(EICRA, ISC10);//INT1立ち上がり
-	sbi(EIMSK,INT1);//INT1割り込み許可
+	sbi(PORTD,PD4);//PD5内部プルアップ
 	
 	//PIR Sensor
 	cbi(DDRD, PD7);//PD7入力
@@ -170,7 +167,7 @@ int __attribute__((noreturn)) main(void)
 	TCCR0B = 0b00000011;
 	OCR0A  = 144;
 	//TIMSK0 = 0b00000010;
-	//sbi(TIMSK0,OCIE0A);
+	sbi(TIMSK0,OCIE0A);
 	
 	//USB init
 	uchar   i;
@@ -203,29 +200,27 @@ int __attribute__((noreturn)) main(void)
         wdt_reset();
         usbPoll();
 		
-        if(i==0&&usbInterruptIsReady()){
+        if(usbInterruptIsReady()){
             /* called after every poll of the interrupt endpoint */
             //advanceCircleByFixedAngle();
 			
             //DBG1(0x03, 0, 0);   /* debug output: interrupt report prepared */
 			//j++;
 			resetReportBuffer(&reportBuffer);
-			if(bit_is_clear(PIND,PD3)) sbi(reportBuffer.modifier,0);
-			if(bit_is_clear(PIND,PD4)) sbi(reportBuffer.modifier,1);
-			if(delta > 0) {
+			if(delta > 3) {
 				addKeyCode(&reportBuffer, 26);//W
-				delta = 0;
+				delta %= 4;
 			}
-			else if(delta < 0) {
+			else if(delta < -3) {
 				addKeyCode(&reportBuffer, 22);//S
-				delta = 0;
+				delta = -(-delta % 4);
 			}
 			if(bit_is_clear(PINB,PB1)) addKeyCode(&reportBuffer,4); //戻るボタンはA
 			if(bit_is_clear(PINB,PB2)) addKeyCode(&reportBuffer,7); //決定ボタンはD
 			if(PIRCount > 200 && PIRCount < 0xFF) addKeyCode(&reportBuffer,20); //人感センサーはQ
             usbSetInterrupt((void *)&reportBuffer, sizeof(reportBuffer));
+			//delta = 0;
         }
-		i++;
 		//USB loop end
     }
 }
