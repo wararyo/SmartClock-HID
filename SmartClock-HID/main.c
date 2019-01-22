@@ -200,7 +200,7 @@ int __attribute__((noreturn)) main(void)
         wdt_reset();
         usbPoll();
 		
-        if(usbInterruptIsReady()){
+        if(i == 0 && usbInterruptIsReady()){
             /* called after every poll of the interrupt endpoint */
             //advanceCircleByFixedAngle();
 			
@@ -219,8 +219,8 @@ int __attribute__((noreturn)) main(void)
 			if(bit_is_clear(PINB,PB2)) addKeyCode(&reportBuffer,7); //決定ボタンはD
 			if(PIRCount > 200 && PIRCount < 0xFF) addKeyCode(&reportBuffer,20); //人感センサーはQ
             usbSetInterrupt((void *)&reportBuffer, sizeof(reportBuffer));
-			//delta = 0;
         }
+		i++;
 		//USB loop end
     }
 }
